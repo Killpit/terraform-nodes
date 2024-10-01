@@ -1,44 +1,78 @@
-resource "google_service_account" "default" {
-  account_id   = "my-custom-sa"
-  display_name = "Custom SA for VM Instance"
+provider "google" {
+  project = "<YOUR_PROJECT_ID>"    # Replace with your GCP project ID
+  region  = "us-central1"          # Choose your preferred region
 }
 
-resource "google_compute_instance" "confidential_instance" {
-  name             = "my-confidential-instance"
-  zone             = "us-central1-a"
-  machine_type     = "n2d-standard-2"
-  min_cpu_platform = "AMD Milan"
-
-  confidential_instance_config {
-    enable_confidential_compute = true
-    confidential_instance_type  = "SEV"
-  }
+resource "google_compute_instance" "elk" {
+  name         = "elk-instance"
+  machine_type = "e2-medium"       
+  zone         = "us-central1-a"   
 
   boot_disk {
     initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2004-lts"
+      image = "debian-cloud/debian-12" 
       labels = {
-        my_label = "value"
+        my_label = "prover"
       }
     }
   }
 
-  // Local SSD disk
   scratch_disk {
     interface = "NVME"
+    size = 30
   }
 
   network_interface {
-    network = "default"
-
-    access_config {
-      // Ephemeral public IP
-    }
+    network       = "default"         
   }
 
-  service_account {
-    # Google recommends custom service accounts that have cloud-platform scope and permissions granted via IAM Roles.
-    email  = google_service_account.default.email
-    scopes = ["cloud-platform"]
+  metadata_startup_script = <<-EOF
+              #!/bin/bash
+              # Update the package index
+              sudo apt-get update -y
+              
+              # Install Java (required for Elasticsearch)
+              sudo apt-get install -y openjdk-21-jdk
+              
+              # Install Elasticsearch
+              wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo apt-key add -
+              echo "deb https://artifacts.elastic.co/packages/7.x/apt stable main" | sudo tee -a /etc/apt/sources.list.d/elastic-7.x.list
+              sudo apt-get update -y
+              sudo apt-get install -y elasticsearch
+              sudo systemctl start elasticsearch
+              sudo systemctl enable elasticsearch
+
+              # Install Logstash
+              sudo apt-get install -y logstash
+              sudo systemctl start logstash
+              sudo systemctl enable logstash
+
+              # Install Kibana
+              sudo apt-get install -y kibana
+              sudo systemctl start kibana
+              sudo systemctl enable kibana
+
+              # Install Metricbeat
+              sudo apt-get install -y metricbeat
+              sudo systemctl start metricbeat
+              sudo systemctl enable metricbeat
+              EOF
+
+  tags = ["elk"]
+}
+
+resource "google_compute_firewall" "elk_firewall" {
+  name    = "elk-firewall"
+  network = "default"
+
+  allow {
+    protocol = "tcp"
+    ports    = ["9200", "5601", "5044"]  
   }
+
+  source_ranges = ["0.0.0.0/0"]  
+}
+
+output "elk_instance_ip" {
+  value = google_compute_instance.elk.network_interface[0].access_config[0].nat_ip
 }

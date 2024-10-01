@@ -1,13 +1,13 @@
 resource "google_service_account" "default" {
-  account_id   = "my-custom-sa"
-  display_name = "Custom SA for VM Instance"
+  account_id   = "614303680090-compute@developer.gserviceaccount.com"
+  display_name = "Aleo Prover"
 }
 
 resource "google_compute_instance" "confidential_instance" {
-  name             = "my-confidential-instance"
+  name             = "aleo-prover"
   zone             = "us-central1-a"
-  machine_type     = "n2d-standard-2"
-  min_cpu_platform = "AMD Milan"
+  machine_type     = "n2-standard-8"
+  min_cpu_platform = "Intel Cascade Lake"
 
   confidential_instance_config {
     enable_confidential_compute = true
@@ -18,7 +18,7 @@ resource "google_compute_instance" "confidential_instance" {
     initialize_params {
       image = "ubuntu-os-cloud/ubuntu-2004-lts"
       labels = {
-        my_label = "value"
+        my_label = "prover"
       }
     }
   }
@@ -26,14 +26,11 @@ resource "google_compute_instance" "confidential_instance" {
   // Local SSD disk
   scratch_disk {
     interface = "NVME"
+    size = 80
   }
 
   network_interface {
     network = "default"
-
-    access_config {
-      // Ephemeral public IP
-    }
   }
 
   service_account {
